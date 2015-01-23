@@ -1,8 +1,17 @@
 import xml.etree.ElementTree as ET
 import uuid
+import sys
+import os.path
+import subprocess
+import re
+
+vboxname = sys.argv[1]
+if not(os.path.isfile(vboxname)):
+	sys.exit("Wrong filename")
+
 
 namespace = 'http://www.innotek.de/VirtualBox-settings'
-tree = ET.parse('403_templ.vbox')
+tree = ET.parse(vboxname)
 root = tree.getroot()
 machine = root[0]
 
@@ -18,15 +27,24 @@ machine.set('uuid', '{' + str(new_uuid) + '}')
 uuid_mapping = {};
 for hdd in root.iter('{' + namespace + '}HardDisk'):
 	print hdd.tag, hdd.attrib
-	hdd_uuid = hdd.get('uuid')
-	print hdd_uuid
-	new_uid = uuid.uuid1()
-	new_uid = str(new_uid)
-	uuid_mapping[hdd_uuid] = '{' + new_uid + '}'
-	hdd.set('uuid', '{' + new_uid + '}')
 
-#for mapping in uuid_mapping.keys():
-#	print mapping, " -> ", uuid_mapping[mapping]
+	hdd_uuid = hdd.get('uuid')
+	hdd_path = hdd.get('location')
+	print hdd_uuid
+	print hdd_path
+
+	new_uid_vbox_str = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
+	print new_uid_vbox_str
+	matchObj = re.match( r'^UUID changed to: (.*)$', new_uid_vbox_str)
+	new_uid_vbox = ''
+	if matchObj:
+		print matchObj.group(1)
+		new_uid_vbox = matchObj.group(1)
+	else:
+		raise Exception("Wrong hdd uuid")
+
+	uuid_mapping[hdd_uuid] = '{' + new_uid_vbox + '}'
+	hdd.set('uuid', '{' + new_uid_vbox + '}')
 
 for elem in root.iter():
 	if elem.tag == '{' + namespace + '}Image':
@@ -38,4 +56,4 @@ for elem in root.iter():
 			elem.set('uuid', uuid_mapping[att_uuid])
 
 ET.register_namespace('', namespace)
-tree.write('403_templ.vbox')
+tree.write(vboxname)
