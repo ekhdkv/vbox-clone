@@ -7,15 +7,6 @@ import os.path
 import subprocess
 import re
 
-class VboxConfigParser:
-	def __init__(self, nmspace = ''):
-		self.nmspace = nmspace
-
-	def printNMSpace(self):
-		print self.nmspace
-
-parser = VboxConfigParser('http://www.innotek.de/VirtualBox-settings')
-parser.printNMSpace()
 
 if len(sys.argv) < 2:
 	sys.exit('usage: vbox-clone [machine_file]')
@@ -24,51 +15,79 @@ vboxname = sys.argv[1]
 if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
 
+class XmlNSWrapper:
+	def __init__(self, path ,nmspace = ''):
+		self.path = path
+		self.tree = ET.parse(path)
+		self.root = self.tree.getroot()
+		self.nmspace = nmspace
+
+	def getElementsByName(self, name = '', retFirst = False):
+		elements = []
+		for element in self.root.iter('{' + self.nmspace + '}' + name):
+			elements.append(element)
+
+		if retFirst:
+			return elements[0]
+		else:
+			return elements
+
+	def getElementAttrs(self, element):
+		#attrs = {}
+		#for key in element.attrib:
+		#	attrs[key] = element.attrib[
+		return element.attrib
+
+
+	def setElement(self, element, attr, value):
+		element.set(attr, value)
+
+	def saveXml(self):
+		ET.register_namespace('', self.nmspace)
+		self.tree.write(self.path)
+
+class UuidWrapper:
+	@staticmethod
+	def generateUuid():
+		return '{' + str(uuid.uuid1()) + '}'
+
+	@staticmethod
+	def wrapUuid(uuid):
+		return '{' + uuid + '}'
+
 
 namespace = 'http://www.innotek.de/VirtualBox-settings'
-tree = ET.parse(vboxname)
-root = tree.getroot()
-machine = root[0]
+
+parser = XmlNSWrapper(vboxname, namespace)
+
+machine = parser.getElementsByName('Machine', True)
 
 # machine uuid
-print machine.get('uuid'), "\n"
-new_uuid = uuid.uuid1()
-
-new_uuid_str = str(new_uuid)
-print new_uuid_str, "\n"
-machine.set('uuid', '{' + str(new_uuid) + '}')
+parser.setElement(machine, 'uuid', UuidWrapper.generateUuid())
 
 # media uuid
 uuid_mapping = {};
-for hdd in root.iter('{' + namespace + '}HardDisk'):
-	print hdd.tag, hdd.attrib
+for hdd in parser.getElementsByName('HardDisk'):
 
-	hdd_uuid = hdd.get('uuid')
-	hdd_path = hdd.get('location')
-	print hdd_uuid
-	print hdd_path
+	hdd_attrs = parser.getElementAttrs(hdd)
+	hdd_uuid = hdd_attrs['uuid']
+	hdd_path = hdd_attrs['location']
 
-	new_uid_vbox_str = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
-	print new_uid_vbox_str
-	matchObj = re.match( r'^UUID changed to: (.*)$', new_uid_vbox_str)
+	vboxmanage_lines = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
+	matchObj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
+
 	new_uid_vbox = ''
 	if matchObj:
-		print matchObj.group(1)
 		new_uid_vbox = matchObj.group(1)
 	else:
 		raise Exception("Wrong hdd uuid")
 
-	uuid_mapping[hdd_uuid] = '{' + new_uid_vbox + '}'
-	hdd.set('uuid', '{' + new_uid_vbox + '}')
+	uuid_mapping[hdd_uuid] = UuidWrapper.wrapUuid(new_uid_vbox)
+	parser.setElement(hdd, 'uuid', UuidWrapper.wrapUuid(new_uid_vbox))
 
-for elem in root.iter():
-	if elem.tag == '{' + namespace + '}Image':
-		print 'Found attached'
+for elem in parser.getElementsByName('Image'):
 		att_uuid = elem.get('uuid')
-		print 'uuid: ', att_uuid
 		if att_uuid in uuid_mapping:
-			print 'Changing ', att_uuid, ' to ', uuid_mapping[att_uuid]
-			elem.set('uuid', uuid_mapping[att_uuid])
+			parser.setElement(elem, 'uuid', uuid_mapping[att_uuid])
 
-ET.register_namespace('', namespace)
-tree.write(vboxname)
+parser.saveXml()
