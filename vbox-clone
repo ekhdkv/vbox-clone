@@ -1,0 +1,93 @@
+#!/usr/local/bin/python
+
+import xml.etree.ElementTree as ET
+import uuid
+import sys
+import os.path
+import subprocess
+import re
+
+
+if len(sys.argv) < 2:
+	sys.exit('usage: vbox-clone [machine_file]')
+
+vboxname = sys.argv[1]
+if not(os.path.isfile(vboxname)):
+	sys.exit("Wrong filename")
+
+class XmlNSWrapper:
+	def __init__(self, path ,nmspace = ''):
+		self.path = path
+		self.tree = ET.parse(path)
+		self.root = self.tree.getroot()
+		self.nmspace = nmspace
+
+	def getElementsByName(self, name = '', retFirst = False):
+		elements = []
+		for element in self.root.iter('{' + self.nmspace + '}' + name):
+			elements.append(element)
+
+		if retFirst:
+			return elements[0]
+		else:
+			return elements
+
+	def getElementAttrs(self, element):
+		#attrs = {}
+		#for key in element.attrib:
+		#	attrs[key] = element.attrib[
+		return element.attrib
+
+
+	def setElement(self, element, attr, value):
+		element.set(attr, value)
+
+	def saveXml(self):
+		ET.register_namespace('', self.nmspace)
+		self.tree.write(self.path)
+
+class UuidWrapper:
+	@staticmethod
+	def generateUuid():
+		return '{' + str(uuid.uuid1()) + '}'
+
+	@staticmethod
+	def wrapUuid(uuid):
+		return '{' + uuid + '}'
+
+
+namespace = 'http://www.innotek.de/VirtualBox-settings'
+
+parser = XmlNSWrapper(vboxname, namespace)
+
+machine = parser.getElementsByName('Machine', True)
+
+# machine uuid
+parser.setElement(machine, 'uuid', UuidWrapper.generateUuid())
+
+# media uuid
+uuid_mapping = {};
+for hdd in parser.getElementsByName('HardDisk'):
+
+	hdd_attrs = parser.getElementAttrs(hdd)
+	hdd_uuid = hdd_attrs['uuid']
+	hdd_path = hdd_attrs['location']
+
+	vboxmanage_lines = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
+	matchObj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
+
+	new_uid_vbox = ''
+	if matchObj:
+		new_uid_vbox = matchObj.group(1)
+	else:
+		raise Exception("Wrong hdd uuid")
+
+	uuid_mapping[hdd_uuid] = UuidWrapper.wrapUuid(new_uid_vbox)
+	parser.setElement(hdd, 'uuid', UuidWrapper.wrapUuid(new_uid_vbox))
+
+for elem in parser.getElementsByName('Image'):
+		att_uuid = elem.get('uuid')
+		if att_uuid in uuid_mapping:
+			parser.setElement(elem, 'uuid', uuid_mapping[att_uuid])
+
+parser.saveXml()
