@@ -6,12 +6,15 @@ import sys
 import os.path
 import subprocess
 import re
+import argparse
 
+argpar = argparse.ArgumentParser()
+argpar.add_argument("machine", help="path to VirtualBox machine file")
+argpar.add_argument("-n", dest="name", help="applies a new name to the machine")
+args = argpar.parse_args()
 
-if len(sys.argv) < 2:
-	sys.exit('usage: vbox-clone [machine_file]')
+vboxname = args.machine
 
-vboxname = sys.argv[1]
 if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
 
@@ -64,6 +67,10 @@ machine = parser.getElementsByName('Machine', True)
 
 # machine uuid
 parser.setElement(machine, 'uuid', UuidWrapper.generateUuid())
+
+# machine name
+if args.name:
+	parser.setElement(machine, 'name', args.name)
 
 # media uuid
 uuid_mapping = {};
