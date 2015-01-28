@@ -6,12 +6,13 @@ import sys
 import os.path
 import subprocess
 import re
+import argparse
 
+argpar = argparse.ArgumentParser()
+argpar.add_argument("machine")
+args = argpar.parse_args()
 
-if len(sys.argv) < 2:
-	sys.exit('usage: vbox-clone [machine_file]')
-
-vboxname = sys.argv[1]
+vboxname = args.machine
 if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
 
