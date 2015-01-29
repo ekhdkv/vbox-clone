@@ -36,9 +36,6 @@ class XmlNSWrapper:
 			return elements
 
 	def getElementAttrs(self, element):
-		#attrs = {}
-		#for key in element.attrib:
-		#	attrs[key] = element.attrib[
 		return element.attrib
 
 
