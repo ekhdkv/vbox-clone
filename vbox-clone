@@ -3,27 +3,51 @@
 import xml.etree.ElementTree as ET
 import uuid
 import sys
-import os.path
+import os
 import subprocess
 import re
 import argparse
+import shutil
 
 argpar = argparse.ArgumentParser()
 argpar.add_argument("machine", help="path to VirtualBox machine file")
 argpar.add_argument("-n", dest="name", help="applies a new name to the machine")
+argpar.add_argument("-f", dest="nobackup", help="the backup of original vm file will not be saved", action="store_true")
 args = argpar.parse_args()
 
 vboxname = args.machine
 
+# check for vm file
 if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
 
+# checking for VBoxManage executable
+VB_MANAGE = ''
+for vbshell in ['vboxmanage', 'VBoxManage']:
+	ret = 1
+        try:
+                with open(os.devnull) as fnull:
+                        ret = subprocess.call([vbshell], stdout=fnull, stderr=fnull)
+        except:
+                pass
+	if ret == 0:
+		VB_MANAGE = vbshell
+
+if VB_MANAGE == '':
+	raise Exception("Can not found VBoxManage executable")
+
+
 class XmlNSWrapper:
-	def __init__(self, path ,nmspace = ''):
+	def __init__(self, path):
 		self.path = path
 		self.tree = ET.parse(path)
 		self.root = self.tree.getroot()
-		self.nmspace = nmspace
+
+		nmMatchObj = re.match( r'^{(.*)}', self.root.tag)
+		if nmMatchObj:
+			self.nmspace = nmMatchObj.group(1)
+		else:
+			self.nmspace = ''
 
 	def getElementsByName(self, name = '', retFirst = False):
 		elements = []
@@ -36,9 +60,6 @@ class XmlNSWrapper:
 			return elements
 
 	def getElementAttrs(self, element):
-		#attrs = {}
-		#for key in element.attrib:
-		#	attrs[key] = element.attrib[
 		return element.attrib
 
 
@@ -59,9 +80,7 @@ class UuidWrapper:
 		return '{' + uuid + '}'
 
 
-namespace = 'http://www.innotek.de/VirtualBox-settings'
-
-parser = XmlNSWrapper(vboxname, namespace)
+parser = XmlNSWrapper(vboxname)
 
 machine = parser.getElementsByName('Machine', True)
 
@@ -80,7 +99,7 @@ for hdd in parser.getElementsByName('HardDisk'):
 	hdd_uuid = hdd_attrs['uuid']
 	hdd_path = hdd_attrs['location']
 
-	vboxmanage_lines = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
+	vboxmanage_lines = subprocess.check_output([VB_MANAGE, 'internalcommands', 'sethduuid', hdd_path])
 	matchObj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
 
 	new_uid_vbox = ''
@@ -96,5 +115,9 @@ for elem in parser.getElementsByName('Image'):
 		att_uuid = elem.get('uuid')
 		if att_uuid in uuid_mapping:
 			parser.setElement(elem, 'uuid', uuid_mapping[att_uuid])
+
+# saving original file
+if not args.nobackup:
+	shutil.copyfile(vboxname, vboxname + ".orig")
 
 parser.saveXml()
