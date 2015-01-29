@@ -3,7 +3,7 @@
 import xml.etree.ElementTree as ET
 import uuid
 import sys
-import os.path
+import os
 import subprocess
 import re
 import argparse
@@ -17,8 +17,25 @@ args = argpar.parse_args()
 
 vboxname = args.machine
 
+# check for vm file
 if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
+
+# checking for VBoxManage executable
+VB_MANAGE = ''
+for vbshell in ['vboxmanage', 'VBoxManage']:
+	ret = 1
+        try:
+                with open(os.devnull) as fnull:
+                        ret = subprocess.call([vbshell], stdout=fnull, stderr=fnull)
+        except:
+                pass
+	if ret == 0:
+		VB_MANAGE = vbshell
+
+if VB_MANAGE == '':
+	raise Exception("Can not found VBoxManage executable")
+
 
 class XmlNSWrapper:
 	def __init__(self, path):
@@ -82,7 +99,7 @@ for hdd in parser.getElementsByName('HardDisk'):
 	hdd_uuid = hdd_attrs['uuid']
 	hdd_path = hdd_attrs['location']
 
-	vboxmanage_lines = subprocess.check_output(['VBoxManage', 'internalcommands', 'sethduuid', hdd_path])
+	vboxmanage_lines = subprocess.check_output([VB_MANAGE, 'internalcommands', 'sethduuid', hdd_path])
 	matchObj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
 
 	new_uid_vbox = ''
