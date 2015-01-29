@@ -21,11 +21,16 @@ if not(os.path.isfile(vboxname)):
 	sys.exit("Wrong filename")
 
 class XmlNSWrapper:
-	def __init__(self, path ,nmspace = ''):
+	def __init__(self, path):
 		self.path = path
 		self.tree = ET.parse(path)
 		self.root = self.tree.getroot()
-		self.nmspace = nmspace
+
+		nmMatchObj = re.match( r'^{(.*)}', self.root.tag)
+		if nmMatchObj:
+			self.nmspace = nmMatchObj.group(1)
+		else:
+			self.nmspace = ''
 
 	def getElementsByName(self, name = '', retFirst = False):
 		elements = []
@@ -58,9 +63,7 @@ class UuidWrapper:
 		return '{' + uuid + '}'
 
 
-namespace = 'http://www.innotek.de/VirtualBox-settings'
-
-parser = XmlNSWrapper(vboxname, namespace)
+parser = XmlNSWrapper(vboxname)
 
 machine = parser.getElementsByName('Machine', True)
 
