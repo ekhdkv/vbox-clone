@@ -9,115 +9,115 @@ import re
 import argparse
 import shutil
 
-argpar = argparse.ArgumentParser()
-argpar.add_argument("machine", help="path to VirtualBox machine file")
-argpar.add_argument("-n", dest="name", help="applies a new name to the machine")
-argpar.add_argument("-f", dest="nobackup", help="the backup of original vm file will not be saved", action="store_true")
-args = argpar.parse_args()
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument("machine", help="path to VirtualBox machine file")
+arg_parser.add_argument("-n", dest="name", help="applies a new name to the machine")
+arg_parser.add_argument("-f", dest="nobackup", help="the backup of original vm file will not be saved", action="store_true")
+args = arg_parser.parse_args()
 
-vboxname = args.machine
+machine_path = args.machine
 
 # check for vm file
-if not(os.path.isfile(vboxname)):
-	sys.exit("Wrong filename")
+if not(os.path.isfile(machine_path)):
+    sys.exit("Wrong filename")
 
 # checking for VBoxManage executable
-VB_MANAGE = ''
-for vbshell in ['vboxmanage', 'VBoxManage']:
-	ret = 1
-        try:
-                with open(os.devnull) as fnull:
-                        ret = subprocess.call([vbshell], stdout=fnull, stderr=fnull)
-        except:
-                pass
-	if ret == 0:
-		VB_MANAGE = vbshell
+vbox_shell = ''
+for shell in ['vboxmanage', 'VBoxManage']:
+    ret = 1
+    try:
+        with open(os.devnull) as fnull:
+            ret = subprocess.call([shell], stdout=fnull, stderr=fnull)
+    except:
+        pass
+    if ret == 0:
+        vbox_shell = shell
 
-if VB_MANAGE == '':
-	raise Exception("Can not found VBoxManage executable")
-
-
-class XmlNSWrapper:
-	def __init__(self, path):
-		self.path = path
-		self.tree = ET.parse(path)
-		self.root = self.tree.getroot()
-
-		nmMatchObj = re.match( r'^{(.*)}', self.root.tag)
-		if nmMatchObj:
-			self.nmspace = nmMatchObj.group(1)
-		else:
-			self.nmspace = ''
-
-	def getElementsByName(self, name = '', retFirst = False):
-		elements = []
-		for element in self.root.iter('{' + self.nmspace + '}' + name):
-			elements.append(element)
-
-		if retFirst:
-			return elements[0]
-		else:
-			return elements
-
-	def getElementAttrs(self, element):
-		return element.attrib
+if vbox_shell == '':
+    raise Exception("Can not found VBoxManage executable")
 
 
-	def setElement(self, element, attr, value):
-		element.set(attr, value)
+class XMLNSWrapper:
+    def __init__(self, path):
+        self._path = path
+        self._tree = ET.parse(path)
+        self._root = self._tree.getroot()
 
-	def saveXml(self):
-		ET.register_namespace('', self.nmspace)
-		self.tree.write(self.path)
+        nm_match_obj = re.match( r'^{(.*)}', self._root.tag)
+        if nm_match_obj:
+            self._nmspace = nm_match_obj.group(1)
+        else:
+            self._nmspace = ''
 
-class UuidWrapper:
-	@staticmethod
-	def generateUuid():
-		return '{' + str(uuid.uuid1()) + '}'
+    def get_elements_by_name(self, name = '', ret_first = False):
+        elements = []
+        for element in self._root.iter('{' + self._nmspace + '}' + name):
+            elements.append(element)
 
-	@staticmethod
-	def wrapUuid(uuid):
-		return '{' + uuid + '}'
+        if ret_first:
+            return elements[0]
+        else:
+            return elements
+
+    def get_element_attrs(self, element):
+        return element.attrib
 
 
-parser = XmlNSWrapper(vboxname)
+    def set_element(self, element, attr, value):
+        element.set(attr, value)
 
-machine = parser.getElementsByName('Machine', True)
+    def save_xml(self):
+        ET.register_namespace('', self._nmspace)
+        self._tree.write(self._path)
+
+class UUIDWrapper:
+    @staticmethod
+    def generate_uuid():
+        return '{' + str(uuid.uuid1()) + '}'
+
+    @staticmethod
+    def wrap_uuid(uuid):
+        return '{' + uuid + '}'
+
+
+xml_parser = XMLNSWrapper(machine_path)
+
+machine = xml_parser.get_elements_by_name('Machine', True)
 
 # machine uuid
-parser.setElement(machine, 'uuid', UuidWrapper.generateUuid())
+xml_parser.set_element(machine, 'uuid', UUIDWrapper.generate_uuid())
 
 # machine name
 if args.name:
-	parser.setElement(machine, 'name', args.name)
+    xml_parser.set_element(machine, 'name', args.name)
 
 # media uuid
 uuid_mapping = {};
-for hdd in parser.getElementsByName('HardDisk'):
+for hdd in xml_parser.get_elements_by_name('HardDisk'):
 
-	hdd_attrs = parser.getElementAttrs(hdd)
-	hdd_uuid = hdd_attrs['uuid']
-	hdd_path = hdd_attrs['location']
+    hdd_attrs = xml_parser.get_element_attrs(hdd)
+    hdd_uuid = hdd_attrs['uuid']
+    hdd_path = hdd_attrs['location']
 
-	vboxmanage_lines = subprocess.check_output([VB_MANAGE, 'internalcommands', 'sethduuid', hdd_path])
-	matchObj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
+    vboxmanage_lines = subprocess.check_output([vbox_shell, 'internalcommands', 'sethduuid', hdd_path])
+    match_obj = re.match( r'^UUID changed to: (.*)$', vboxmanage_lines)
 
-	new_uid_vbox = ''
-	if matchObj:
-		new_uid_vbox = matchObj.group(1)
-	else:
-		raise Exception("Wrong hdd uuid")
+    new_hdd_uuid = ''
+    if match_obj:
+        new_hdd_uuid = match_obj.group(1)
+    else:
+        raise Exception("Wrong hdd uuid")
 
-	uuid_mapping[hdd_uuid] = UuidWrapper.wrapUuid(new_uid_vbox)
-	parser.setElement(hdd, 'uuid', UuidWrapper.wrapUuid(new_uid_vbox))
+    uuid_mapping[hdd_uuid] = UUIDWrapper.wrap_uuid(new_hdd_uuid)
+    xml_parser.set_element(hdd, 'uuid', UUIDWrapper.wrap_uuid(new_hdd_uuid))
 
-for elem in parser.getElementsByName('Image'):
-		att_uuid = elem.get('uuid')
-		if att_uuid in uuid_mapping:
-			parser.setElement(elem, 'uuid', uuid_mapping[att_uuid])
+for image in xml_parser.get_elements_by_name('Image'):
+        image_uuid = image.get('uuid')
+        if image_uuid in uuid_mapping:
+            xml_parser.set_element(image, 'uuid', uuid_mapping[image_uuid])
 
 # saving original file
 if not args.nobackup:
-	shutil.copyfile(vboxname, vboxname + ".orig")
+    shutil.copyfile(machine_path, machine_path + ".orig")
 
-parser.saveXml()
+xml_parser.save_xml()
