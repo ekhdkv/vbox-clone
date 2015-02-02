@@ -1,5 +1,3 @@
-#!/usr/local/bin/python
-
 import xml.etree.ElementTree as ET
 import uuid
 import sys
