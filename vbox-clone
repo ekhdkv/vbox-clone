@@ -21,6 +21,10 @@ machine_path = args.machine
 if not(os.path.isfile(machine_path)):
     sys.exit("Wrong filename")
 
+# setting path
+machine_dir = os.path.dirname(os.path.realpath(machine_path))
+os.chdir(machine_dir)
+
 # checking for VBoxManage executable
 vbox_shell = ''
 for shell in ['vboxmanage', 'VBoxManage']:
