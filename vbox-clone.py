@@ -1,5 +1,3 @@
-#!/usr/local/bin/python
-
 import xml.etree.ElementTree as ET
 import uuid
 import sys
@@ -20,6 +18,10 @@ machine_path = args.machine
 # check for vm file
 if not(os.path.isfile(machine_path)):
     sys.exit("Wrong filename")
+
+# setting path
+machine_dir = os.path.dirname(os.path.realpath(machine_path))
+os.chdir(machine_dir)
 
 # checking for VBoxManage executable
 vbox_shell = ''
